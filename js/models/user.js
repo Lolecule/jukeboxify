@@ -4,7 +4,7 @@ User = Backbone.Model.extend({
     id: 'me'
   }
   initialize: function() {
-    var params = queryParams();
+    var params = $.deparam.querystring();
     if (params.access_token != null) {
       this.set({ token: params.access_token })
     }
