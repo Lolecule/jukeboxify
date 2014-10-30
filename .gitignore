@@ -52,3 +52,10 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+# Spotify Stuff
+tmp
+spotify_appkey.key
+
+# Vim
+*.swp
+*.swo
