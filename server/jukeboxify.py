@@ -60,7 +60,7 @@ class Controller:
         assert self.listening == True
 
     def execute_command(self):
-        valid_opcodes = ('login')
+        valid_opcodes = ('login', 'add_to_queue')
         try:
             command = self.listen()
             if command["opcode"] in valid_opcodes:
@@ -95,6 +95,15 @@ class Controller:
         }
         with open('.jukeboxify', 'w') as fd:
             json.dump(credentials, fd)
+
+    def add_to_queue(self, *track_ids):
+        for track_id in track_ids:
+            self.queue.append(spotify.Track(track_id).load())
+        self.reply(self.queue_as_json())
+
+    def queue_as_json(self):
+        human_readable_tracks = [track.name for track in self.queue]
+        return { "current_track": self.cursor, "queue": human_readable_tracks }
 
     def register_callbacks(self):
         callbacks = {
