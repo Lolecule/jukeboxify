@@ -7,12 +7,38 @@ import os.path
 import json
 import time
 
+class TrackQueue:
+
+    def __init__(self, session):
+        self.queue = []
+        self.cursor = 0
+        self.session = session
+
+    def add(self, track_ids):
+        for track_id in track_ids:
+            self.queue.append(self.session.get_track(track_id).load())
+
+    def as_json(self):
+        tracklist = [self._human_readable_track_name(track) for track in self.queue]
+        queue_as_json = {
+            'current_track': self.cursor,
+            'queue': tracklist
+        }
+        return queue_as_json
+
+    def _human_readable_track_name(self, track):
+        artists = track.artists
+        artist_names = [artist.load().name for artist in artists]
+        return track.name + " - " + ", ".join(artist_names)
+
 class Controller:
 
     def __init__(self):
         self.listening = True
         self.active = True
+        self.cursor = 0
         self.session = spotify.Session()
+        self.queue = TrackQueue(self.session)
         self.register_callbacks()
         self.event_loop = spotify.EventLoop(self.session)
         self.event_loop.start()
@@ -60,7 +86,7 @@ class Controller:
         assert self.listening == True
 
     def execute_command(self):
-        valid_opcodes = ('login', 'add_to_queue')
+        valid_opcodes = ('login', 'add_to_queue', 'get_queue')
         try:
             command = self.listen()
             if command["opcode"] in valid_opcodes:
@@ -97,13 +123,11 @@ class Controller:
             json.dump(credentials, fd)
 
     def add_to_queue(self, *track_ids):
-        for track_id in track_ids:
-            self.queue.append(spotify.Track(track_id).load())
-        self.reply(self.queue_as_json())
+        self.queue.add(track_ids)
+        self.reply(self.queue.as_json())
 
-    def queue_as_json(self):
-        human_readable_tracks = [track.name for track in self.queue]
-        return { "current_track": self.cursor, "queue": human_readable_tracks }
+    def get_queue(self):
+        self.reply(self.queue.as_json())
 
     def register_callbacks(self):
         callbacks = {

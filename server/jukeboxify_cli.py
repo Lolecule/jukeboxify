@@ -30,7 +30,11 @@ def enter_repl(socket):
             elif json['opcode'] == 'login':
                 json = login_prompt()
             socket.send_json(json)
-            print(socket.recv_json()["message"])
+            response = socket.recv_json()
+            if "message" in response:
+                print(response["message"])
+            else:
+                print(response)
     except KeyboardInterrupt:
         print("Exiting Jukeboxify CLI...")
         socket.disconnect('tcp://127.0.0.1:7890')
