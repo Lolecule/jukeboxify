@@ -7,18 +7,85 @@ import os.path
 import json
 import time
 
-class TrackQueue:
+class Player:
 
     def __init__(self, session):
         self.queue = []
-        self.cursor = 0
+        self.cursor = None
         self.session = session
+        self.midtrack = False
+        self.playing = False
+        self.audio = spotify.PortAudioSink(self.session)
+        self.event_loop = spotify.EventLoop(self.session)
+        self.event_loop.start()
 
-    def add(self, track_ids):
+    def add_to_queue(self, *track_ids):
         for track_id in track_ids:
             self.queue.append(self.session.get_track(track_id).load())
+        return self._as_json()
 
-    def as_json(self):
+    def get_queue(self):
+        return self._as_json()
+
+    def play(self):
+        self._load_next_track()
+        self._play_track()
+        return {}
+
+    def pause(self):
+        self.session.player.pause()
+        self.playing = False
+        return {}
+
+    def next(self):
+        self._load_next_track(ignore_if_midtrack=False)
+        self._play_track()
+        return {}
+
+    def prev(self):
+        self._load_next_track(ignore_if_midtrack=False, forwards=False)
+        self._play_track()
+        return {}
+    
+    def end_of_track_callback(self, session):
+        self.next()
+
+    def _play_track(self):
+        self.session.player.play()
+        self.midtrack = True
+        self.playing = True
+
+    def _load_next_track(self, ignore_if_midtrack=True, forwards=True):
+        if ignore_if_midtrack and self.midtrack:
+            return
+        else:
+            if forwards:
+                self._increment_cursor()
+            else:
+                self._decrement_cursor()
+            if self.midtrack:
+                self.session.player.pause()
+                self.session.player.unload()
+            track = self.queue[self.cursor]
+            self.session.player.load(track)
+
+    def _increment_cursor(self):
+        if self.cursor is None:
+            self.cursor = 0
+        else:
+            self.cursor += 1
+            if self.cursor >= len(self.queue):
+                self.cursor = 0
+
+    def _decrement_cursor(self):
+        if self.cursor is None:
+            self.cursor = 0
+        else:
+            self.cursor -= 1
+            if self.cursor < 0:
+                self.cursor = len(self.queue) - 1
+                
+    def _as_json(self):
         tracklist = [self._human_readable_track_name(track) for track in self.queue]
         queue_as_json = {
             'current_track': self.cursor,
@@ -36,12 +103,12 @@ class Controller:
     def __init__(self):
         self.listening = True
         self.active = True
+        self.playing = False
+        self.midtrack = False
         self.cursor = 0
         self.session = spotify.Session()
-        self.queue = TrackQueue(self.session)
+        self.player = Player(self.session)
         self.register_callbacks()
-        self.event_loop = spotify.EventLoop(self.session)
-        self.event_loop.start()
 
         try:
             if os.path.isfile('.jukeboxify'):
@@ -86,13 +153,17 @@ class Controller:
         assert self.listening == True
 
     def execute_command(self):
-        valid_opcodes = ('login', 'add_to_queue', 'get_queue')
+        local_opcodes = ('login')
+        player_opcodes = ('add_to_queue', 'get_queue', 'play', 'pause', 'next', 'prev')
         try:
             command = self.listen()
-            if command["opcode"] in valid_opcodes:
-                getattr(self, command["opcode"])(*command["args"])
+            if command["opcode"] in local_opcodes:
+                response = getattr(self, command["opcode"])(*command["args"])
+            elif command["opcode"] in player_opcodes:
+                response = getattr(self.player, command["opcode"])(*command["args"])
             else:
-                self.reply(constants.INVALID_COMMAND)
+                response = constants.INVALID_COMMAND
+            self.reply(response)
         except KeyError:
             self.reply(constants.INVALID_COMMAND)
 
@@ -122,18 +193,12 @@ class Controller:
         with open('.jukeboxify', 'w') as fd:
             json.dump(credentials, fd)
 
-    def add_to_queue(self, *track_ids):
-        self.queue.add(track_ids)
-        self.reply(self.queue.as_json())
-
-    def get_queue(self):
-        self.reply(self.queue.as_json())
-
     def register_callbacks(self):
         callbacks = {
             'LOGGED_IN': self.login_callback,
             'LOGGED_OUT': self.logout_callback,
-            'CREDENTIALS_BLOB_UPDATED': self.credentials_blob_callback
+            'CREDENTIALS_BLOB_UPDATED': self.credentials_blob_callback,
+            'END_OF_TRACK': self.player.end_of_track_callback
         }
         for name in callbacks:
             self.session.on(getattr(spotify.SessionEvent, name),
