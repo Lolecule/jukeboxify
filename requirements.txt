@@ -1,3 +1,4 @@
 pyspotify
-pyaudio
+pyalsaaudio
 flask
+pyzmq

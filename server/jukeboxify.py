@@ -15,7 +15,7 @@ class Player:
         self.session = session
         self.midtrack = False
         self.playing = False
-        self.audio = spotify.PortAudioSink(self.session)
+        self.audio = spotify.AlsaSink(self.session)
         self.event_loop = spotify.EventLoop(self.session)
         self.event_loop.start()
 
@@ -46,7 +46,7 @@ class Player:
         self._load_next_track(ignore_if_midtrack=False, forwards=False)
         self._play_track()
         return {}
-    
+
     def end_of_track_callback(self, session):
         self.next()
 
